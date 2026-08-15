@@ -11,7 +11,7 @@
 		"use:patched": "pnpm add ./vendor/astrojs-vercel-patched.tgz"
 	},
 	"dependencies": {
-		"@astrojs/vercel": "11.0.5",
+		"@astrojs/vercel": "file:vendor/astrojs-vercel-patched.tgz",
 		"astro": "7.2.2"
 	}
 }
