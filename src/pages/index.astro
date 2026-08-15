@@ -1,7 +1,9 @@
 ---
-import { BYPASS_TOKEN, ISR_EXPIRATION, SESSION_COOKIE } from '../config.js';
+import { BYPASS_TOKEN, ISR_EXPIRATION, RENDER_COST_MS, SESSION_COOKIE } from '../config.js';
 
 export const prerender = false;
+
+await new Promise((resolve) => setTimeout(resolve, RENDER_COST_MS));
 
 const renderedAt = new Date().toISOString();
 const adapterVersion = (await import('@astrojs/vercel/package.json', { with: { type: 'json' } }))
@@ -93,6 +95,20 @@ const adapterVersion = (await import('@astrojs/vercel/package.json', { with: { t
 		<button id="toggle-session">Toggle session cookie</button>
 		<button id="probe-protected">Probe /protected</button>
 
+		<h2>3. Is the cache still saving the render?</h2>
+		<p>
+			This page sleeps {RENDER_COST_MS}ms before rendering. "Measure" times a forced re-render
+			(request carrying the bypass token) against a normal cached request.
+		</p>
+		<table>
+			<tbody>
+				<tr><th>uncached render</th><td id="cold">—</td></tr>
+				<tr><th>cached request</th><td id="warm">—</td></tr>
+				<tr><th>verdict</th><td id="timing-verdict">click "Measure"</td></tr>
+			</tbody>
+		</table>
+		<button id="measure">Measure</button>
+
 		<script>
 			const { bypassToken, sessionCookie } = document.body.dataset;
 			const $ = (id) => document.getElementById(id);
@@ -150,6 +166,31 @@ const adapterVersion = (await import('@astrojs/vercel/package.json', { with: { t
 				);
 			}
 
+			const timed = async (init) => {
+				const started = performance.now();
+				const response = await fetch('/', { cache: 'no-store', ...init });
+				await response.text();
+				return Math.round(performance.now() - started);
+			};
+
+			async function measure() {
+				$('timing-verdict').textContent = 'measuring…';
+				const cold = await timed({ headers: { 'x-prerender-revalidate': bypassToken } });
+				await new Promise((resolve) => setTimeout(resolve, 2000));
+				const warm = await timed();
+
+				$('cold').textContent = `${cold} ms`;
+				$('warm').textContent = `${warm} ms`;
+				setVerdict(
+					$('timing-verdict'),
+					warm < cold ? 'ok' : 'bug',
+					warm < cold
+						? `cache saves ${cold - warm} ms`
+						: 'the cached request was not faster — cache not in play',
+				);
+			}
+
+			$('measure').addEventListener('click', measure);
 			$('probe').addEventListener('click', probe);
 			$('probe-protected').addEventListener('click', probeProtected);
 
