@@ -62,10 +62,15 @@ const adapterVersion = (await import('@astrojs/vercel/package.json', { with: { t
 		</p>
 
 		<h2>1. Does middleware run on a cache hit?</h2>
+		<p>
+			The middleware stamps <code>x-middleware-ran-at</code> on the way out. If that stamp is older
+			than the request, it came out of the cache with the HTML — the middleware did not run.
+		</p>
 		<table>
 			<tbody>
 				<tr><th>x-vercel-cache</th><td id="cache">—</td></tr>
 				<tr><th>x-middleware-ran-at</th><td id="mw">—</td></tr>
+				<tr><th>HTML rendered at</th><td id="body-rendered">—</td></tr>
 				<tr><th>verdict</th><td id="verdict">click "Probe /"</td></tr>
 			</tbody>
 		</table>
@@ -75,7 +80,8 @@ const adapterVersion = (await import('@astrojs/vercel/package.json', { with: { t
 		<h2>2. Does a middleware redirect still guard /protected?</h2>
 		<p>
 			Middleware redirects <code>/protected</code> to <code>/login</code> unless the
-			<code>{SESSION_COOKIE}</code> cookie is set.
+			<code>{SESSION_COOKIE}</code> cookie is set. Toggle the cookie, probe, then toggle back and
+			probe again: on a broken build both answers come from whichever one got cached first.
 		</p>
 		<table>
 			<tbody>
@@ -105,21 +111,27 @@ const adapterVersion = (await import('@astrojs/vercel/package.json', { with: { t
 
 			async function probe() {
 				const response = await fetch('/', { cache: 'no-store' });
-				const cache = response.headers.get('x-vercel-cache') ?? '(none)';
 				const ranAt = response.headers.get('x-middleware-ran-at');
-				$('cache').textContent = cache;
-				$('mw').textContent = ranAt ?? '(header missing)';
+				const html = await response.text();
+				const renderedAt = html.match(/data-rendered-at="([^"]+)"/)?.[1];
 
-				const cached = cache === 'HIT' || cache === 'STALE';
-				if (!cached) {
-					setVerdict($('verdict'), 'unknown', `cache ${cache} — probe again for a cache hit`);
+				$('cache').textContent = response.headers.get('x-vercel-cache') ?? '(none)';
+				$('mw').textContent = ranAt ?? '(header missing)';
+				$('body-rendered').textContent = renderedAt ?? '(not found)';
+
+				if (!ranAt) {
+					setVerdict($('verdict'), 'bug', 'no middleware header at all');
 					return;
 				}
-				if (ranAt) {
-					setVerdict($('verdict'), 'ok', 'middleware ran on a cache hit — patched');
+				if (Date.parse(ranAt) - Date.parse(renderedAt) > 1000) {
+					setVerdict($('verdict'), 'ok', 'middleware ran now, HTML came from the cache — patched');
 					return;
 				}
-				setVerdict($('verdict'), 'bug', 'cache hit served without middleware — bug');
+				if (Date.now() - Date.parse(ranAt) > 5000) {
+					setVerdict($('verdict'), 'bug', 'stamp cached with the HTML — middleware did not run');
+					return;
+				}
+				setVerdict($('verdict'), 'unknown', 'cache entry was just built — probe again');
 			}
 
 			async function probeProtected() {
