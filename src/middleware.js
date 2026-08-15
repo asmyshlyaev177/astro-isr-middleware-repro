@@ -12,5 +12,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
 	const response = await next();
 	response.headers.set('x-middleware-ran-at', ranAt);
 	response.headers.set('x-middleware-session', session ?? 'anonymous');
+	// What the ISR subrequest reported, before the outer response overwrites x-vercel-cache.
+	response.headers.set('x-isr-cache', response.headers.get('x-vercel-cache') ?? 'none');
+	response.headers.set('x-isr-age', response.headers.get('age') ?? 'none');
 	return response;
 });
