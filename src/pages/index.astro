@@ -1,0 +1,167 @@
+---
+import { BYPASS_TOKEN, ISR_EXPIRATION, SESSION_COOKIE } from '../config.js';
+
+export const prerender = false;
+
+const renderedAt = new Date().toISOString();
+const adapterVersion = (await import('@astrojs/vercel/package.json', { with: { type: 'json' } }))
+	.default.version;
+---
+
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Astro ISR + edge middleware</title>
+		<style>
+			body {
+				font-family: ui-monospace, monospace;
+				max-width: 46rem;
+				margin: 2rem auto;
+				padding: 0 1rem;
+				line-height: 1.5;
+			}
+			table {
+				border-collapse: collapse;
+				width: 100%;
+				margin: 1rem 0;
+			}
+			td,
+			th {
+				border: 1px solid #ccc;
+				padding: 0.4rem 0.6rem;
+				text-align: left;
+			}
+			button {
+				font: inherit;
+				padding: 0.4rem 0.8rem;
+				margin: 0 0.4rem 0.4rem 0;
+			}
+			.ok {
+				color: #0a7a2f;
+			}
+			.bug {
+				color: #b00020;
+			}
+			.unknown {
+				color: #7a5c00;
+			}
+		</style>
+	</head>
+	<body
+		data-bypass-token={BYPASS_TOKEN}
+		data-session-cookie={SESSION_COOKIE}
+		data-rendered-at={renderedAt}
+	>
+		<h1>ISR + edge middleware</h1>
+
+		<p>
+			HTML rendered at <strong>{renderedAt}</strong> (changes only when the ISR cache entry is
+			rebuilt, expiration {ISR_EXPIRATION}s).<br />
+			Adapter <strong>@astrojs/vercel {adapterVersion}</strong>.
+		</p>
+
+		<h2>1. Does middleware run on a cache hit?</h2>
+		<table>
+			<tbody>
+				<tr><th>x-vercel-cache</th><td id="cache">—</td></tr>
+				<tr><th>x-middleware-ran-at</th><td id="mw">—</td></tr>
+				<tr><th>verdict</th><td id="verdict">click "Probe /"</td></tr>
+			</tbody>
+		</table>
+		<button id="probe">Probe /</button>
+		<button id="reset">Reset ISR cache</button>
+
+		<h2>2. Does a middleware redirect still guard /protected?</h2>
+		<p>
+			Middleware redirects <code>/protected</code> to <code>/login</code> unless the
+			<code>{SESSION_COOKIE}</code> cookie is set.
+		</p>
+		<table>
+			<tbody>
+				<tr><th>session cookie</th><td id="session">—</td></tr>
+				<tr><th>GET /protected</th><td id="protected">—</td></tr>
+				<tr><th>verdict</th><td id="protected-verdict">click "Probe /protected"</td></tr>
+			</tbody>
+		</table>
+		<button id="toggle-session">Toggle session cookie</button>
+		<button id="probe-protected">Probe /protected</button>
+
+		<script>
+			const { bypassToken, sessionCookie } = document.body.dataset;
+			const $ = (id) => document.getElementById(id);
+
+			const hasSession = () =>
+				document.cookie.split('; ').some((c) => c.startsWith(`${sessionCookie}=`));
+
+			const setVerdict = (el, state, text) => {
+				el.className = state;
+				el.textContent = text;
+			};
+
+			function renderSession() {
+				$('session').textContent = hasSession() ? 'set' : 'absent';
+			}
+
+			async function probe() {
+				const response = await fetch('/', { cache: 'no-store' });
+				const cache = response.headers.get('x-vercel-cache') ?? '(none)';
+				const ranAt = response.headers.get('x-middleware-ran-at');
+				$('cache').textContent = cache;
+				$('mw').textContent = ranAt ?? '(header missing)';
+
+				const cached = cache === 'HIT' || cache === 'STALE';
+				if (!cached) {
+					setVerdict($('verdict'), 'unknown', `cache ${cache} — probe again for a cache hit`);
+					return;
+				}
+				if (ranAt) {
+					setVerdict($('verdict'), 'ok', 'middleware ran on a cache hit — patched');
+					return;
+				}
+				setVerdict($('verdict'), 'bug', 'cache hit served without middleware — bug');
+			}
+
+			async function probeProtected() {
+				const response = await fetch('/protected', { redirect: 'manual', cache: 'no-store' });
+				const redirected = response.type === 'opaqueredirect' || response.status === 307;
+				$('protected').textContent = redirected ? 'redirected to /login' : `status ${response.status}`;
+
+				const expected = hasSession() ? !redirected : redirected;
+				const wanted = hasSession() ? 'the page' : 'a redirect';
+				setVerdict(
+					$('protected-verdict'),
+					expected ? 'ok' : 'bug',
+					expected
+						? `middleware decided this request: got ${wanted}`
+						: `stale cached response: expected ${wanted}`,
+				);
+			}
+
+			$('probe').addEventListener('click', probe);
+			$('probe-protected').addEventListener('click', probeProtected);
+
+			$('reset').addEventListener('click', async () => {
+				await fetch('/', {
+					headers: { 'x-prerender-revalidate': bypassToken },
+					cache: 'no-store',
+				});
+				await fetch('/protected', {
+					headers: { 'x-prerender-revalidate': bypassToken },
+					cache: 'no-store',
+					redirect: 'manual',
+				});
+				location.reload();
+			});
+
+			$('toggle-session').addEventListener('click', () => {
+				document.cookie = hasSession()
+					? `${sessionCookie}=; path=/; max-age=0`
+					: `${sessionCookie}=alex; path=/; max-age=3600`;
+				renderSession();
+			});
+
+			renderSession();
+		</script>
+	</body>
+</html>

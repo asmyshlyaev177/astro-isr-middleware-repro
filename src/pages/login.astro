@@ -1,0 +1,18 @@
+---
+export const prerender = false;
+
+const renderedAt = new Date().toISOString();
+---
+
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>Login</title>
+	</head>
+	<body style="font-family: ui-monospace, monospace">
+		<h1>Login</h1>
+		<p>The middleware sent you here because no session cookie was present.</p>
+		<p>Rendered at {renderedAt}</p>
+		<a href="/">back</a>
+	</body>
+</html>

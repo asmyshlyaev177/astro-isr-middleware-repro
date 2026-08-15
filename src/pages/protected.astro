@@ -1,0 +1,21 @@
+---
+import { SESSION_COOKIE } from '../config.js';
+
+export const prerender = false;
+
+const session = Astro.cookies.get(SESSION_COOKIE)?.value ?? 'anonymous';
+const renderedAt = new Date().toISOString();
+---
+
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>Protected</title>
+	</head>
+	<body style="font-family: ui-monospace, monospace">
+		<h1>Protected page</h1>
+		<p>Session: {session}</p>
+		<p>Rendered at {renderedAt}</p>
+		<a href="/">back</a>
+	</body>
+</html>

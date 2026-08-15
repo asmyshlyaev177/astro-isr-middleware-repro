@@ -1,0 +1,17 @@
+{
+	"name": "astro-isr-middleware-repro",
+	"private": true,
+	"type": "module",
+	"version": "0.0.1",
+	"scripts": {
+		"dev": "astro dev",
+		"build": "astro build",
+		"check": "node scripts/check-build-output.mjs",
+		"use:published": "pnpm add @astrojs/vercel@11.0.5",
+		"use:patched": "pnpm add ./vendor/astrojs-vercel-patched.tgz"
+	},
+	"dependencies": {
+		"@astrojs/vercel": "11.0.5",
+		"astro": "7.2.2"
+	}
+}
