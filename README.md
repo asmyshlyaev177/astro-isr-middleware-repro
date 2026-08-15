@@ -2,6 +2,30 @@
 
 Reproduction for [withastro/astro#17687](https://github.com/withastro/astro/pull/17687).
 
+Live:
+
+- broken (`@astrojs/vercel` 11.0.5) — https://astro-isr-middleware-repro.vercel.app
+- patched (PR branch) — https://astro-isr-mw-patched.vercel.app
+
+Three consecutive requests to each, same moment:
+
+```
+broken    cache=MISS  x-middleware-ran-at=03:41:19.688  html-rendered-at=03:41:19.690
+          cache=HIT   x-middleware-ran-at=03:41:19.688  html-rendered-at=03:41:19.690
+          cache=HIT   x-middleware-ran-at=03:41:19.688  html-rendered-at=03:41:19.690
+
+patched   cache=MISS  x-middleware-ran-at=03:41:20.922  html-rendered-at=03:41:21.249
+          cache=MISS  x-middleware-ran-at=03:41:21.575  html-rendered-at=03:41:21.249
+          cache=MISS  x-middleware-ran-at=03:41:21.967  html-rendered-at=03:41:21.249
+```
+
+Broken: the middleware stamp is frozen at the cold render — it was cached with the HTML, the
+middleware never ran again. Patched: the stamp moves every request while the HTML stays the cached
+one, so middleware runs and the cache still serves.
+
+`x-vercel-cache` reads `MISS` on the patched build because the outer response now comes from the
+edge function; the constant `html-rendered-at` is what shows the ISR cache still working.
+
 With `isr` enabled and `middlewareMode: 'edge'`, every on-demand route is routed straight to the
 ISR function, so the edge middleware is never reached. Middleware still runs *inside* the ISR
 function, which Vercel skips entirely on a cache hit — middleware works on a cold entry and stops
@@ -18,15 +42,18 @@ The home page probes the deployment from the browser and reports what actually h
 
 | Probe | Broken build | Patched build |
 | --- | --- | --- |
-| `GET /` on a cache hit | `x-middleware-ran-at` missing | header present, `x-vercel-cache: HIT` |
-| `GET /protected` with a session cookie | cached redirect to `/login` | the page |
-| `GET /protected` without one | cached page, no redirect | redirect to `/login` |
+| `GET /` twice | `x-middleware-ran-at` frozen at the cold render | stamp fresh every request |
+| `GET /protected` with a session cookie | `307` to `/login`, straight from cache | `200`, the page |
+| `GET /protected` without one | whatever got cached first | `307` to `/login` |
 
-Which of the two `/protected` rows you see depends on whether the cache entry was first built with
-or without the cookie — either way the middleware no longer decides.
+Which `/protected` answer the broken build gives depends on whether the cache entry was first built
+with or without the cookie — either way the middleware no longer decides. Measured on the two
+deployments above: with the cookie set, broken returned a cached `307` to `/login`, patched
+returned `200` with `x-middleware-session: alex`.
 
 "Reset ISR cache" revalidates both cache entries with the `bypassToken` (`x-prerender-revalidate`),
-so you can watch the same request go from correct (cold) to broken (warm).
+so you can watch the same request go from correct (cold) to broken (warm). Verified against both
+deployments; the new entry lands a second or two after the call.
 
 ## Two builds
 
