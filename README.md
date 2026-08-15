@@ -70,6 +70,22 @@ returned `200` with `x-middleware-session: alex`.
 so you can watch the same request go from correct (cold) to broken (warm). Verified against both
 deployments; the new entry lands a second or two after the call.
 
+## Timing
+
+The home page sleeps 1500ms before rendering, so the cache is worth something measurable. The
+**Measure** button times a forced re-render (bypass token) against a normal cached request.
+
+Measured from Europe, 8 warm samples each, sorted:
+
+```text
+broken   warm   0.205 0.209 0.210 0.211 0.215 0.221 0.223 0.227   cold 2.12s
+patched  warm   0.238 0.242 0.242 0.243 0.244 0.246 0.252 0.274   cold 2.87s
+```
+
+The cache still absorbs the 1.5s render on both. Routing through the edge middleware costs about
+30ms per request — the middleware runs and then fetches the cached ISR response over an internal
+hop, instead of the CDN answering directly.
+
 ## Two builds
 
 Same app, one dependency changes:
