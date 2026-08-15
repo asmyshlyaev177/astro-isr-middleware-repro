@@ -23,8 +23,23 @@ Broken: the middleware stamp is frozen at the cold render — it was cached with
 middleware never ran again. Patched: the stamp moves every request while the HTML stays the cached
 one, so middleware runs and the cache still serves.
 
-`x-vercel-cache` reads `MISS` on the patched build because the outer response now comes from the
-edge function; the constant `html-rendered-at` is what shows the ISR cache still working.
+`x-vercel-cache` reads `MISS` on the patched build because it describes the *outer* request, which
+now ends in the `_middleware` edge function — function responses are never cache-served, so the
+proxy stamps `MISS` and resets `age` to 0. The ISR hit happens on the middleware's subrequest to
+`/_isr?x_astro_path=…`. The middleware copies that subrequest's status out as `x-isr-cache`:
+
+```
+patched   x-isr-cache: MISS  x-vercel-cache: MISS   (cold)
+          x-isr-cache: HIT   x-vercel-cache: MISS
+          x-isr-cache: HIT   x-vercel-cache: MISS
+
+broken    x-isr-cache: none  x-vercel-cache: MISS   (cold, middleware ran inside the ISR function)
+          x-isr-cache: none  x-vercel-cache: HIT
+          x-isr-cache: none  x-vercel-cache: HIT
+```
+
+So on a patched build, read `x-isr-cache` (or the constant `html-rendered-at`) for cache status,
+not `x-vercel-cache`.
 
 With `isr` enabled and `middlewareMode: 'edge'`, every on-demand route is routed straight to the
 ISR function, so the edge middleware is never reached. Middleware still runs *inside* the ISR
