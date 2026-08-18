@@ -97,7 +97,7 @@ packages:
     engines: {node: 18.20.8 || ^20.3.0 || >=22.0.0}
 
   '@astrojs/vercel@file:vendor/astrojs-vercel-patched.tgz':
-    resolution: {integrity: sha512-tw1AIjzorMiTWausYHzR0kvdd9vquv23XAgf8JGY5bm7ujeiR2zqyaHrU46iVx/MWQPUJ2JJw8V9JyXxc7P5+w==, tarball: file:vendor/astrojs-vercel-patched.tgz}
+    resolution: {integrity: sha512-uwaqgj7xXUm4a2wXUDcMOx/RDt44/l3njcATKOxAsMBaKnHJ5O8/skGQ8SAV2ttZbLgiL3xcPG/wFK0H5TN2ig==, tarball: file:vendor/astrojs-vercel-patched.tgz}
     version: 11.0.5
     peerDependencies:
       astro: ^7.0.0
