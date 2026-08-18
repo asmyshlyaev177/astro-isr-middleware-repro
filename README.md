@@ -39,7 +39,9 @@ broken    x-isr-cache: none  x-vercel-cache: MISS   (cold, middleware ran inside
 ```
 
 So on a patched build, read `x-isr-cache` (or the constant `html-rendered-at`) for cache status,
-not `x-vercel-cache`.
+not `x-vercel-cache`. Note that the proxy stamps `MISS` on the middleware's subrequest to
+`_render` as well, so `MISS` alone says nothing — `/live/42` (excluded) and `/no-such-page`
+(unmatched) both read `MISS` forever. `HIT` is the only positive signal.
 
 With `isr` enabled and `middlewareMode: 'edge'`, every on-demand route is routed straight to the
 ISR function, so the edge middleware is never reached. Middleware still runs *inside* the ISR
