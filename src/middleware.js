@@ -9,11 +9,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
 		return context.redirect('/login', 307);
 	}
 
-	const startedAt = Date.now();
 	const response = await next();
-	const forwardMs = Date.now() - startedAt;
-
-	response.headers.set('x-forward-ms', String(forwardMs));
 	response.headers.set('x-middleware-ran-at', ranAt);
 	response.headers.set('x-middleware-session', session ?? 'anonymous');
 	// What the ISR subrequest reported, before the outer response overwrites x-vercel-cache.
