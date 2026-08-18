@@ -1,0 +1,20 @@
+---
+import { EXCLUDED_PREFIX } from '../../config.js';
+
+export const prerender = false;
+
+const renderedAt = new Date().toISOString();
+---
+
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>Live {Astro.params.id}</title>
+	</head>
+	<body style="font-family: ui-monospace, monospace" data-rendered-at={renderedAt}>
+		<h1>{EXCLUDED_PREFIX}/{Astro.params.id}</h1>
+		<p>Rendered at {renderedAt}</p>
+		<p>Matched by <code>isr.exclude</code>, so every request must render again.</p>
+		<a href="/">back</a>
+	</body>
+</html>

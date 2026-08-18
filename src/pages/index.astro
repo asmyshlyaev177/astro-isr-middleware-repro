@@ -1,5 +1,11 @@
 ---
-import { BYPASS_TOKEN, ISR_EXPIRATION, RENDER_COST_MS, SESSION_COOKIE } from '../config.js';
+import {
+	BYPASS_TOKEN,
+	EXCLUDED_PREFIX,
+	ISR_EXPIRATION,
+	RENDER_COST_MS,
+	SESSION_COOKIE,
+} from '../config.js';
 
 export const prerender = false;
 
@@ -54,6 +60,7 @@ const adapterVersion = (await import('@astrojs/vercel/package.json', { with: { t
 		data-bypass-token={BYPASS_TOKEN}
 		data-session-cookie={SESSION_COOKIE}
 		data-rendered-at={renderedAt}
+		data-excluded-prefix={EXCLUDED_PREFIX}
 	>
 		<h1>ISR + edge middleware</h1>
 
@@ -95,7 +102,36 @@ const adapterVersion = (await import('@astrojs/vercel/package.json', { with: { t
 		<button id="toggle-session">Toggle session cookie</button>
 		<button id="probe-protected">Probe /protected</button>
 
-		<h2>3. Is the cache still saving the render?</h2>
+		<h2>3. Does <code>isr.exclude</code> still exclude?</h2>
+		<p>
+			<code>{EXCLUDED_PREFIX}/[id]</code> is matched by a <code>RegExp</code> in
+			<code>isr.exclude</code>, and its pattern overlaps nothing else. Two requests must render
+			twice: if the timestamps match, the middleware forwarded an excluded route into the cache.
+		</p>
+		<table>
+			<tbody>
+				<tr><th>first render</th><td id="excluded-first">—</td></tr>
+				<tr><th>second render</th><td id="excluded-second">—</td></tr>
+				<tr><th>verdict</th><td id="excluded-verdict">click "Probe {EXCLUDED_PREFIX}/42"</td></tr>
+			</tbody>
+		</table>
+		<button id="probe-excluded">Probe {EXCLUDED_PREFIX}/42</button>
+
+		<h2>4. Is the query string part of the cache key?</h2>
+		<p>
+			<code>/?probe=1</code> and <code>/?probe=2</code> are the same cached page. Different
+			timestamps mean each query string built its own entry, so the cache fragments per URL.
+		</p>
+		<table>
+			<tbody>
+				<tr><th>/?probe=1</th><td id="query-one">—</td></tr>
+				<tr><th>/?probe=2</th><td id="query-two">—</td></tr>
+				<tr><th>verdict</th><td id="query-verdict">click "Probe query strings"</td></tr>
+			</tbody>
+		</table>
+		<button id="probe-query">Probe query strings</button>
+
+		<h2>5. Is the cache still saving the render?</h2>
 		<p>
 			This page sleeps {RENDER_COST_MS}ms before rendering. "Measure" times a forced re-render
 			(request carrying the bypass token) against a normal cached request.
@@ -110,7 +146,7 @@ const adapterVersion = (await import('@astrojs/vercel/package.json', { with: { t
 		<button id="measure">Measure</button>
 
 		<script>
-			const { bypassToken, sessionCookie } = document.body.dataset;
+			const { bypassToken, sessionCookie, excludedPrefix } = document.body.dataset;
 			const $ = (id) => document.getElementById(id);
 
 			const hasSession = () =>
@@ -166,6 +202,42 @@ const adapterVersion = (await import('@astrojs/vercel/package.json', { with: { t
 				);
 			}
 
+			const renderedAtOf = async (path) => {
+				const response = await fetch(path, { cache: 'no-store' });
+				const html = await response.text();
+				return html.match(/data-rendered-at="([^"]+)"/)?.[1] ?? '(not found)';
+			};
+
+			async function probeExcluded() {
+				const first = await renderedAtOf(`${excludedPrefix}/42`);
+				const second = await renderedAtOf(`${excludedPrefix}/42`);
+
+				$('excluded-first').textContent = first;
+				$('excluded-second').textContent = second;
+				setVerdict(
+					$('excluded-verdict'),
+					first !== second ? 'ok' : 'bug',
+					first !== second
+						? 'rendered twice — the exclusion holds'
+						: 'same render served twice — the excluded route is being cached',
+				);
+			}
+
+			async function probeQuery() {
+				const one = await renderedAtOf('/?probe=1');
+				const two = await renderedAtOf('/?probe=2');
+
+				$('query-one').textContent = one;
+				$('query-two').textContent = two;
+				setVerdict(
+					$('query-verdict'),
+					one === two ? 'ok' : 'bug',
+					one === two
+						? 'one entry for both — the query string stays out of the cache key'
+						: 'separate renders — each query string built its own cache entry',
+				);
+			}
+
 			const timed = async (init) => {
 				const started = performance.now();
 				const response = await fetch('/', { cache: 'no-store', ...init });
@@ -191,6 +263,8 @@ const adapterVersion = (await import('@astrojs/vercel/package.json', { with: { t
 			}
 
 			$('measure').addEventListener('click', measure);
+			$('probe-excluded').addEventListener('click', probeExcluded);
+			$('probe-query').addEventListener('click', probeQuery);
 			$('probe').addEventListener('click', probe);
 			$('probe-protected').addEventListener('click', probeProtected);
 

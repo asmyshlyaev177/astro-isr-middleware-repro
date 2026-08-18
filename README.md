@@ -60,6 +60,16 @@ The home page probes the deployment from the browser and reports what actually h
 | `GET /` twice | `x-middleware-ran-at` frozen at the cold render | stamp fresh every request |
 | `GET /protected` with a session cookie | `307` to `/login`, straight from cache | `200`, the page |
 | `GET /protected` without one | whatever got cached first | `307` to `/login` |
+| `GET /live/42` twice | renders twice | renders twice |
+| `GET /?probe=1` then `/?probe=2` | one cache entry | one cache entry |
+
+The last two probes pass on both builds, and that is the point: they pin the two things a fix
+routing ISR traffic through the middleware can quietly break. `/live/[id]` is matched by a
+`RegExp` in `isr.exclude`, so it must never reach the cache; `?probe=` must not enter the cache
+key, or the entry fragments per URL. Forwarding by *exclusion* — anything not explicitly excluded
+goes to `/_isr` — fails both, plus gives every unmatched 404 URL its own cache entry. The patch
+forwards by a positive list of the ISR route patterns instead, with the exclusions checked first,
+because a dynamic cached route can also match an excluded path.
 
 Which `/protected` answer the broken build gives depends on whether the cache entry was first built
 with or without the cookie — either way the middleware no longer decides. Measured on the two
@@ -105,12 +115,18 @@ The bug is visible in the generated `.vercel/output/config.json`:
 ```sh
 pnpm use:published && pnpm build && pnpm check
 # /_isr?x_astro_path=$0&…   ^/$
-# UNPATCHED: every route goes straight to the ISR cache, the middleware is unreachable
+# UNPATCHED: every cached route goes straight to the ISR function, the middleware is unreachable
 
 pnpm use:patched && pnpm build && pnpm check
 # _middleware               ^/$
-# PATCHED: 4 route(s) enter through the edge middleware
+# PATCHED: 4 cached route(s) enter through the edge middleware
+#   next() -> _isr:     ^\/login\/?$ ^\/protected\/?$ ^\/$ ^\/404\/?$
+#   next() -> _render:  ^/live/([^/]+?)$ + anything unmatched
 ```
+
+The last two lines are the table the patched middleware forwards by, read back out of the built
+edge bundle. `isr.exclude` entries are checked before the cached patterns, and a path matching
+neither goes to `_render` rather than getting its own cache entry.
 
 ## Deploy both to Vercel
 
