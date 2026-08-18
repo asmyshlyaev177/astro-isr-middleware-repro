@@ -3,3 +3,4 @@ export const BYPASS_TOKEN = process.env.BYPASS_TOKEN ?? 'astroisrmiddlewarerepro
 export const SESSION_COOKIE = 'repro_session';
 export const ISR_EXPIRATION = 600;
 export const RENDER_COST_MS = 1500;
+export const EXCLUDED_PREFIX = '/live';
