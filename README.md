@@ -7,16 +7,16 @@ Live:
 - broken (`@astrojs/vercel` 11.0.5) — https://astro-isr-middleware-repro.vercel.app
 - patched (PR branch) — https://astro-isr-mw-patched.vercel.app
 
-Three consecutive requests to each, same moment:
+Three consecutive requests to each, right after a revalidation:
 
 ```
-broken    cache=MISS  x-middleware-ran-at=03:41:19.688  html-rendered-at=03:41:19.690
-          cache=HIT   x-middleware-ran-at=03:41:19.688  html-rendered-at=03:41:19.690
-          cache=HIT   x-middleware-ran-at=03:41:19.688  html-rendered-at=03:41:19.690
+broken    cache=HIT   x-middleware-ran-at=15:04:14.405  html-rendered-at=15:04:15.907
+          cache=HIT   x-middleware-ran-at=15:04:14.405  html-rendered-at=15:04:15.907
+          cache=HIT   x-middleware-ran-at=15:04:14.405  html-rendered-at=15:04:15.907
 
-patched   cache=MISS  x-middleware-ran-at=03:41:20.922  html-rendered-at=03:41:21.249
-          cache=MISS  x-middleware-ran-at=03:41:21.575  html-rendered-at=03:41:21.249
-          cache=MISS  x-middleware-ran-at=03:41:21.967  html-rendered-at=03:41:21.249
+patched   cache=MISS  x-middleware-ran-at=15:04:19.034  html-rendered-at=15:04:17.797
+          cache=MISS  x-middleware-ran-at=15:04:19.452  html-rendered-at=15:04:17.797
+          cache=MISS  x-middleware-ran-at=15:04:19.705  html-rendered-at=15:04:17.797
 ```
 
 Broken: the middleware stamp is frozen at the cold render — it was cached with the HTML, the
